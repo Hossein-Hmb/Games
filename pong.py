@@ -106,7 +106,7 @@ while running:
         ball.x = -BALL_SPEED # serve toward player 2
 
     # 8) Draw scores
-    screen.blit(font.render(str("Player 1: " + str(player1_score)), True, BLUE), (SCORE_POSITION[0] - 100, SCORE_POSITION[1]))
+    screen.blit(font.render(str("Player 1: " + str(player1_score)), True, BLUE), (SCORE_POSITION[0] - 300, SCORE_POSITION[1]))
     screen.blit(font.render(str("Player 2: " + str(player2_score)), True, RED), (SCORE_POSITION[0] + 100, SCORE_POSITION[1]))
 
     pygame.display.flip()
