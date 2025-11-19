@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rostam vs Esfandyar: The Seven Labors</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Press Start 2P', cursive;
+            overflow: hidden;
+            color: white;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 450px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            background: #87CEEB; /* Sky fallback */
+            image-rendering: pixelated;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* UI Overlays */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        /* Rostam HUD (Top Left) */
+        .hud-rostam {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+        }
+
+        .bar-container {
+            margin-bottom: 5px;
+            background: #333;
+            border: 2px solid #000;
+            width: 200px;
+            height: 15px;
+            position: relative;
+        }
+
+        .bar-fill {
+            height: 100%;
+            transition: width 0.1s;
+        }
+
+        #hp-bar { background: #e74c3c; }
+        #fp-bar { background: #3498db; }
+
+        .label {
+            font-size: 10px;
+            margin-bottom: 2px;
+            text-shadow: 1px 1px 0 #000;
+        }
+
+        /* Esfandyar HUD (Bottom) */
+        .hud-boss {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 1s;
+        }
+
+        #boss-hp-container {
+            width: 100%;
+            height: 20px;
+            background: #333;
+            border: 2px solid #ffd700; /* Gold border for the prince */
+        }
+
+        #boss-hp-bar {
+            width: 100%;
+            height: 100%;
+            background: #8e44ad; /* Purple/Royal */
+        }
+
+        .boss-name {
+            font-size: 14px;
+            margin-bottom: 5px;
+            color: #ffd700;
+            text-transform: uppercase;
+            text-shadow: 2px 2px 0 #000;
+        }
+
+        /* Screens */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            text-align: center;
+            z-index: 10;
+        }
+
+        .hidden { display: none !important; }
+
+        h1 { color: #e67e22; text-shadow: 3px 3px 0 #000; line-height: 1.5;}
+        h2 { font-size: 16px; margin-top: 20px; color: #ccc; }
+        
+        button {
+            background: #e67e22;
+            border: 4px solid #d35400;
+            color: white;
+            font-family: 'Press Start 2P', cursive;
+            padding: 15px 20px;
+            margin: 10px;
+            font-size: 12px;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+
+        button:hover {
+            background: #d35400;
+            transform: scale(1.05);
+        }
+
+        .controls-hint {
+            margin-top: 30px;
+            font-size: 10px;
+            color: #aaa;
+            line-height: 1.8;
+        }
+
+        .key {
+            color: #ffd700;
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas" width="800" height="450"></canvas>
+
+    <!-- UI Layer -->
+    <div id="ui-layer">
+        <div class="hud-rostam">
+            <div class="label">ROSTAM</div>
+            <div class="bar-container"><div id="hp-bar" class="bar-fill" style="width: 100%;"></div></div>
+            <div class="bar-container"><div id="fp-bar" class="bar-fill" style="width: 100%;"></div></div>
+        </div>
+
+        <div class="hud-boss" id="boss-hud">
+            <div class="boss-name">Prince Esfandyar</div>
+            <div id="boss-hp-container"><div id="boss-hp-bar" class="bar-fill" style="width: 100%;"></div></div>
+        </div>
+    </div>
+
+    <!-- Menu Screen -->
+    <div id="menu-screen" class="screen">
+        <h1>ROSTAM<br>VS<br>ESFANDYAR</h1>
+        <p style="font-size: 10px; color: #888;">THE IRON TRAGEDY</p>
+        
+        <div style="margin-top: 20px;">
+            <button onclick="startGame('casual')">Casual Mode</button>
+            <button onclick="startGame('souls')">Souls-Like</button>
+        </div>
+
+        <div class="controls-hint">
+            ARROWS: Move &nbsp;|&nbsp; SPACE: Jump<br>
+            Z: Attack &nbsp;|&nbsp; X: Spin Attack (FP)<br>
+            C: Dash (Dodge)
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over-screen" class="screen hidden">
+        <h1 id="go-title">YOU DIED</h1>
+        <button onclick="resetGame()">Try Again</button>
+    </div>
+</div>
+
+<script>
+/**
+ * GAME ENGINE & CONSTANTS
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Audio Context for simple synth sounds
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+const audioCtx = new AudioContext();
+
+const GRAVITY = 0.6;
+const FRICTION = 0.8;
+const FLOOR_Y = 380;
+
+// Game State
+let gameRunning = false;
+let difficulty = 'casual';
+let frame = 0;
+let particles = [];
+let cameraShake = 0;
+
+// Input State
+const keys = {
+    ArrowRight: false,
+    ArrowLeft: false,
+    ArrowUp: false,
+    ArrowDown: false,
+    z: false,
+    x: false,
+    c: false,
+    Space: false
+};
+
+/**
+ * ASSET GENERATION (Pixel Art via Arrays)
+ * 0: Transparent, 1: Skin, 2: Orange(Tiger), 3: Metal, 4: Black, 5: Gold, 6: Purple, 7: White
+ */
+const colors = [
+    null, '#ffccaa', '#e67e22', '#bdc3c7', '#111', '#f1c40f', '#8e44ad', '#ecf0f1'
+];
+
+// 10x10 Sprite Grid for Rostam
+const rostamSprite = [
+    [0,0,3,3,3,3,0,0,0,0], // Helmet top
+    [0,0,3,1,1,3,0,0,0,0], // Face
+    [0,2,2,2,2,2,2,0,3,0], // Shoulders / Sword handle
+    [0,2,4,2,4,2,0,0,3,0], // Tiger skin logic
+    [0,2,2,2,2,2,0,3,3,3], // Torso / Sword blade
+    [0,0,2,2,2,0,0,0,0,0], // Belt
+    [0,0,4,0,4,0,0,0,0,0], // Legs
+    [0,0,4,0,4,0,0,0,0,0], // Legs
+    [0,3,3,0,3,3,0,0,0,0], // Boots
+];
+
+// 12x12 Sprite Grid for Esfandyar (Bigger)
+const esfandyarSprite = [
+    [0,0,0,5,5,5,5,0,0,0,0,0],
+    [0,0,0,5,1,1,5,0,0,0,0,0], // Golden Helmet
+    [0,0,5,5,5,5,5,5,0,5,0,0], // Golden Armor
+    [0,0,5,7,5,5,7,5,0,5,0,0], // Armor details / Weapon
+    [0,0,5,5,5,5,5,5,0,5,5,5], // Spear/Sword
+    [0,0,0,5,5,5,5,0,0,0,0,0], 
+    [0,0,0,6,6,6,6,0,0,0,0,0], // Purple sash
+    [0,0,5,5,0,0,5,5,0,0,0,0], // Greaves
+    [0,0,5,5,0,0,5,5,0,0,0,0],
+    [0,0,5,5,0,0,5,5,0,0,0,0],
+];
+
+/**
+ * SOUND ENGINE
+ */
+function playSound(type) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    const now = audioCtx.currentTime;
+
+    if (type === 'jump') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(300, now + 0.1);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+    } else if (type === 'attack') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(100, now);
+        osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+    } else if (type === 'hit') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(50, now);
+        osc.frequency.exponentialRampToValueAtTime(10, now + 0.2);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+    } else if (type === 'clash') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(100, now + 0.05);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.05);
+        osc.start(now);
+        osc.stop(now + 0.05);
+    }
+}
+
+/**
+ * CLASSES
+ */
+class Entity {
+    constructor(x, y, width, height, color, hp) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.color = color;
+        this.vx = 0;
+        this.vy = 0;
+        this.hp = hp;
+        this.maxHp = hp;
+        this.facingRight = true;
+        this.grounded = false;
+        this.isDead = false;
+        this.invulnerable = false;
+        this.flashTime = 0;
+        this.state = 'idle';
+    }
+
+    update() {
+        if (this.isDead) return;
+
+        // Physics
+        this.vy += GRAVITY;
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // Ground Collision
+        if (this.y + this.height >= FLOOR_Y) {
+            this.y = FLOOR_Y - this.height;
+            this.vy = 0;
+            this.grounded = true;
+        } else {
+            this.grounded = false;
+        }
+
+        // Friction
+        if (this.grounded) {
+            this.vx *= FRICTION;
+        }
+
+        // Wall boundaries
+        if(this.x < 0) this.x = 0;
+        if(this.x + this.width > 800) this.x = 800 - this.width;
+
+        if(this.flashTime > 0) this.flashTime--;
+    }
+
+    drawSprite(ctx, spriteData, pixelSize) {
+        if (this.flashTime > 0 && Math.floor(frame / 4) % 2 === 0) return; // Blink effect
+
+        ctx.save();
+        ctx.translate(this.x + this.width/2, this.y + this.height/2);
+        if (!this.facingRight) ctx.scale(-1, 1);
+        ctx.translate(-this.width/2, -this.height/2);
+
+        for (let r = 0; r < spriteData.length; r++) {
+            for (let c = 0; c < spriteData[r].length; c++) {
+                let colorIndex = spriteData[r][c];
+                if (colorIndex !== 0) {
+                    ctx.fillStyle = colors[colorIndex];
+                    ctx.fillRect(c * pixelSize, r * pixelSize, pixelSize, pixelSize);
+                }
+            }
+        }
+        ctx.restore();
+    }
+}
+
+class Player extends Entity {
+    constructor() {
+        super(100, 300, 40, 36, '#e67e22', 100);
+        this.fp = 100;
+        this.maxFp = 100;
+        this.speed = 5;
+        this.jumpForce = -12;
+        this.attackCooldown = 0;
+        this.dashCooldown = 0;
+        this.isDashing = false;
+        this.attackBox = { x:0, y:0, w:0, h:0, active: false };
+    }
+
+    update() {
+        super.update();
+        if (this.isDead) return;
+
+        // Input Handling
+        if (!this.isDashing && this.attackCooldown <= 20) {
+            if (keys.ArrowRight) {
+                this.vx = this.speed;
+                this.facingRight = true;
+            }
+            if (keys.ArrowLeft) {
+                this.vx = -this.speed;
+                this.facingRight = false;
+            }
+            if ((keys.Space || keys.ArrowUp) && this.grounded) {
+                this.vy = this.jumpForce;
+                playSound('jump');
+            }
+        }
+
+        // Attack (Z)
+        if (keys.z && this.attackCooldown === 0 && !this.isDashing) {
+            this.attack(false);
+        }
+
+        // Spin Attack (X)
+        if (keys.x && this.attackCooldown === 0 && !this.isDashing && this.fp >= 20) {
+            this.attack(true);
+            this.fp -= 20;
+        }
+
+        // Dash (C)
+        if (keys.c && this.dashCooldown === 0 && !this.isDashing && (keys.ArrowLeft || keys.ArrowRight)) {
+            this.startDash();
+        }
+
+        // Cooldowns & Regen
+        if (this.attackCooldown > 0) this.attackCooldown--;
+        if (this.dashCooldown > 0) this.dashCooldown--;
+        if (this.fp < this.maxFp && frame % 10 === 0) this.fp += 0.5;
+        if (this.isDashing) {
+            this.vx = this.facingRight ? 12 : -12; // High speed
+            this.vy = 0; // No gravity during dash
+            if (this.attackCooldown < 15) this.endDash(); // Dash duration based on repurposed timer
+        }
+
+        // Update Attack Box Position
+        if (this.attackBox.active) {
+            this.attackBox.x = this.facingRight ? this.x + this.width : this.x - 40;
+            this.attackBox.y = this.y;
+        } else {
+            this.attackBox.active = false;
+        }
+    }
+
+    startDash() {
+        this.isDashing = true;
+        this.invulnerable = true;
+        this.attackCooldown = 25; // Dash duration
+        this.dashCooldown = 60;
+        createParticles(this.x + this.width/2, this.y + this.height, 5, '#fff');
+        playSound('jump');
+    }
+
+    endDash() {
+        this.isDashing = false;
+        this.invulnerable = false;
+        this.attackCooldown = 0;
+    }
+
+    attack(isSpecial) {
+        this.attackCooldown = 30;
+        this.attackBox.w = isSpecial ? 80 : 40;
+        this.attackBox.h = this.height;
+        this.attackBox.active = true;
+        
+        playSound('attack');
+
+        // Visual effect for attack
+        setTimeout(() => { this.attackBox.active = false; }, 200);
+
+        // Special Spin logic: Hit both sides
+        if (isSpecial) {
+            this.invulnerable = true;
+            setTimeout(() => { this.invulnerable = false; }, 300);
+        }
+    }
+
+    draw() {
+        this.drawSprite(ctx, rostamSprite, 4);
+        
+        // Draw Sword Slash
+        if (this.attackBox.active) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.fillRect(this.attackBox.x, this.attackBox.y, this.attackBox.w, this.attackBox.h);
+        }
+    }
+}
+
+class Boss extends Entity {
+    constructor(mode) {
+        super(600, 280, 48, 48, '#f1c40f', mode === 'souls' ? 800 : 400); // Bigger, more HP
+        this.mode = mode;
+        this.aiState = 'decide'; // decide, prep, attack, cooldown
+        this.timer = 0;
+        this.target = null;
+        this.attackBox = { x:0, y:0, w:0, h:0, active: false };
+        this.telegraphColor = null;
+    }
+
+    update(player) {
+        super.update();
+        if (this.isDead) return;
+        this.target = player;
+        
+        // Face player
+        if (this.aiState !== 'attack') {
+            this.facingRight = player.x > this.x;
+        }
+
+        // AI State Machine
+        if (this.timer > 0) {
+            this.timer--;
+        } else {
+            this.runAI();
+        }
+
+        // Hitbox management
+        if (this.attackBox.active) {
+             // Logic handled in attack function mostly
+        }
+    }
+
+    runAI() {
+        const dist = Math.abs(this.target.x - this.x);
+
+        switch(this.aiState) {
+            case 'decide':
+                // Randomly choose next move based on distance
+                let rand = Math.random();
+                if (dist < 100) {
+                    // Close range: Slash or Backstep
+                    if (rand > 0.3) this.prepareAttack('slash');
+                    else this.backStep();
+                } else {
+                    // Long range: Lunge or Ground Slam
+                    if (rand > 0.5) this.prepareAttack('lunge');
+                    else this.prepareAttack('slam');
+                }
+                break;
+
+            case 'prep':
+                this.executeAttack();
+                break;
+
+            case 'attack':
+                this.aiState = 'cooldown';
+                this.timer = this.mode === 'souls' ? 30 : 80; // Faster recovery in souls mode
+                this.attackBox.active = false;
+                this.telegraphColor = null;
+                break;
+
+            case 'cooldown':
+                this.aiState = 'decide';
+                this.timer = 10;
+                break;
+        }
+    }
+
+    prepareAttack(type) {
+        this.currentAttack = type;
+        this.aiState = 'prep';
+        
+        // Telegraph times vary by difficulty
+        let prepTime = this.mode === 'souls' ? 20 : 40; 
+        this.timer = prepTime;
+
+        // Visual cues
+        if (type === 'slash') this.telegraphColor = 'rgba(255,0,0,0.3)'; // Red warning
+        if (type === 'lunge') this.telegraphColor = 'rgba(255,255,0,0.3)'; // Yellow warning
+        if (type === 'slam') this.telegraphColor = 'rgba(142, 68, 173, 0.3)'; // Purple warning
+    }
+
+    executeAttack() {
+        this.aiState = 'attack';
+        this.timer = 20; // Duration of attack frame
+        playSound('attack');
+
+        if (this.currentAttack === 'slash') {
+            this.attackBox = {
+                x: this.facingRight ? this.x + this.width : this.x - 60,
+                y: this.y,
+                w: 60, h: this.height,
+                active: true,
+                damage: 15
+            };
+        } else if (this.currentAttack === 'lunge') {
+            this.vx = this.facingRight ? 15 : -15; // Dash forward
+            this.attackBox = {
+                x: this.x - 10, y: this.y, w: this.width + 20, h: this.height,
+                active: true,
+                damage: 20
+            };
+        } else if (this.currentAttack === 'slam') {
+            this.vy = -10; // Jump up
+            this.timer = 40; // Longer duration for jump
+            setTimeout(() => {
+                // Shockwave on land
+                this.vy = 15; // Slam down
+                cameraShake = 10;
+                this.attackBox = {
+                    x: this.x - 50, y: this.y + this.height - 10, w: this.width + 100, h: 20,
+                    active: true,
+                    damage: 25
+                };
+            }, 300);
+        }
+    }
+
+    backStep() {
+        this.vx = this.facingRight ? -8 : 8;
+        this.timer = 20;
+        this.aiState = 'cooldown';
+    }
+
+    draw() {
+        // Telegraph Overlay
+        if (this.telegraphColor) {
+            ctx.save();
+            ctx.fillStyle = this.telegraphColor;
+            ctx.beginPath();
+            ctx.arc(this.x + this.width/2, this.y + this.height/2, 50, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        this.drawSprite(ctx, esfandyarSprite, 4);
+
+        // Draw Attack Hitbox for debug/clarity
+        if (this.attackBox.active) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.fillRect(this.attackBox.x, this.attackBox.y, this.attackBox.w, this.attackBox.h);
+        }
+    }
+}
+
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.size = Math.random() * 4 + 2;
+        this.vx = (Math.random() - 0.5) * 10;
+        this.vy = (Math.random() - 0.5) * 10;
+        this.life = 30;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life--;
+        this.size *= 0.9;
+    }
+    draw() {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.size, this.size);
+    }
+}
+
+/**
+ * MAIN GAME LOOP & LOGIC
+ */
+let player;
+let boss;
+
+function startGame(selectedDifficulty) {
+    difficulty = selectedDifficulty;
+    document.getElementById('menu-screen').classList.add('hidden');
+    document.getElementById('game-over-screen').classList.add('hidden');
+    document.getElementById('boss-hud').style.opacity = '1';
+    
+    gameRunning = true;
+    player = new Player();
+    boss = new Boss(difficulty);
+    particles = [];
+    
+    // Souls mode modifiers
+    if (difficulty === 'souls') {
+        player.maxHp = 80; // Less HP
+        player.hp = 80;
+    }
+
+    updateUI();
+    loop();
+}
+
+function resetGame() {
+    document.getElementById('game-over-screen').classList.add('hidden');
+    document.getElementById('menu-screen').classList.remove('hidden');
+    document.getElementById('boss-hud').style.opacity = '0';
+}
+
+function createParticles(x, y, count, color) {
+    for(let i=0; i<count; i++) {
+        particles.push(new Particle(x, y, color));
+    }
+}
+
+function checkCollisions() {
+    // Player Hit Boss
+    if (player.attackBox.active && !boss.invulnerable && !boss.isDead) {
+        if (rectIntersect(player.attackBox, boss)) {
+            boss.hp -= 15; // Rostam Damage
+            boss.invulnerable = true;
+            boss.flashTime = 10;
+            createParticles(boss.x + boss.width/2, boss.y + boss.height/2, 10, '#f1c40f');
+            playSound('hit');
+            
+            // Knockback
+            boss.vx = player.facingRight ? 5 : -5;
+
+            setTimeout(() => { boss.invulnerable = false; }, 200);
+        }
+    }
+
+    // Boss Hit Player
+    if (boss.attackBox.active && !player.invulnerable && !player.isDead) {
+        if (rectIntersect(boss.attackBox, player)) {
+            let dmg = boss.attackBox.damage || 10;
+            if (difficulty === 'souls') dmg *= 1.5; // Harder hits
+
+            player.hp -= dmg;
+            player.invulnerable = true;
+            player.flashTime = 30;
+            createParticles(player.x + player.width/2, player.y + player.height/2, 15, '#e74c3c');
+            cameraShake = 5;
+            playSound('hit');
+
+            // Knockback
+            player.vx = boss.x < player.x ? 10 : -10;
+            player.vy = -5;
+
+            setTimeout(() => { player.invulnerable = false; }, 1000);
+        } else if (player.isDashing && rectIntersect(boss.attackBox, player)) {
+            // Perfect Dodge
+            playSound('clash'); // Visual/Audio feedback for dodge
+        }
+    }
+}
+
+function rectIntersect(r1, r2) {
+    return !(r2.x > r1.x + r1.w || 
+             r2.x + r2.width < r1.x || 
+             r2.y > r1.y + r1.h ||
+             r2.y + r2.height < r1.y);
+}
+
+function updateUI() {
+    document.getElementById('hp-bar').style.width = (player.hp / player.maxHp * 100) + '%';
+    document.getElementById('fp-bar').style.width = (player.fp / player.maxFp * 100) + '%';
+    document.getElementById('boss-hp-bar').style.width = (boss.hp / boss.maxHp * 100) + '%';
+}
+
+function endGame(result) {
+    gameRunning = false;
+    setTimeout(() => {
+        document.getElementById('game-over-screen').classList.remove('hidden');
+        const title = document.getElementById('go-title');
+        if (result === 'win') {
+            title.innerText = "VICTORY ACHIEVED";
+            title.style.color = "#f1c40f";
+        } else {
+            title.innerText = "YOU DIED";
+            title.style.color = "#c0392b";
+        }
+    }, 1000);
+}
+
+function drawBackground() {
+    // Sky
+    ctx.fillStyle = '#87CEEB';
+    ctx.fillRect(0,0,canvas.width, canvas.height);
+
+    // Distant Mountains (Parallax hint)
+    ctx.fillStyle = '#7f8c8d';
+    ctx.beginPath();
+    ctx.moveTo(0, 380);
+    ctx.lineTo(200, 200);
+    ctx.lineTo(400, 350);
+    ctx.lineTo(600, 150);
+    ctx.lineTo(800, 380);
+    ctx.fill();
+
+    // Ground Arena
+    ctx.fillStyle = '#d35400'; // Dirt floor
+    ctx.fillRect(0, FLOOR_Y, canvas.width, canvas.height - FLOOR_Y);
+    
+    // Arena Columns
+    ctx.fillStyle = '#95a5a6';
+    ctx.fillRect(50, 250, 40, 130);
+    ctx.fillRect(710, 250, 40, 130);
+    
+    // Ground detail
+    ctx.fillStyle = '#ba4a00';
+    ctx.fillRect(0, FLOOR_Y, canvas.width, 10);
+}
+
+function loop() {
+    if (!gameRunning) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Camera Shake
+    if (cameraShake > 0) {
+        ctx.save();
+        let dx = Math.random() * cameraShake - cameraShake/2;
+        let dy = Math.random() * cameraShake - cameraShake/2;
+        ctx.translate(dx, dy);
+        cameraShake *= 0.9;
+        if (cameraShake < 0.5) cameraShake = 0;
+    }
+
+    drawBackground();
+
+    // Update Entities
+    player.update();
+    boss.update(player);
+
+    // Particles
+    particles.forEach((p, i) => {
+        p.update();
+        p.draw();
+        if (p.life <= 0) particles.splice(i, 1);
+    });
+
+    checkCollisions();
+    updateUI();
+
+    // Draw Entities
+    boss.draw();
+    player.draw();
+
+    if (cameraShake > 0) ctx.restore();
+
+    // Win/Loss check
+    if (player.hp <= 0) {
+        player.isDead = true;
+        createParticles(player.x, player.y, 50, '#e74c3c');
+        endGame('loss');
+    } else if (boss.hp <= 0) {
+        boss.isDead = true;
+        createParticles(boss.x, boss.y, 50, '#f1c40f');
+        endGame('win');
+    }
+
+    frame++;
+    requestAnimationFrame(loop);
+}
+
+/**
+ * EVENT LISTENERS
+ */
+window.addEventListener('keydown', (e) => {
+    if (e.key === ' ' && !gameRunning && document.getElementById('game-over-screen').classList.contains('hidden') && !document.getElementById('menu-screen').classList.contains('hidden')) {
+        // Optional: Start with space from menu, mostly UI buttons handle this
+    }
+    
+    if (keys.hasOwnProperty(e.key) || e.key === " " || e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "ArrowUp" || e.key === "ArrowDown") {
+        if(e.key === " ") keys.Space = true;
+        else keys[e.key] = true;
+    }
+});
+
+window.addEventListener('keyup', (e) => {
+    if (keys.hasOwnProperty(e.key) || e.key === " " || e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "ArrowUp" || e.key === "ArrowDown") {
+        if(e.key === " ") keys.Space = false;
+        else keys[e.key] = false;
+    }
+});
+
+</script>
+</body>
+</html>
